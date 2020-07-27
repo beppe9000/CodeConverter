@@ -2,10 +2,10 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using CodeConverter.Tests.CSharp;
+using System.Threading.Tasks;
 using Xunit;
 
-namespace CodeConverter.Tests.TestRunners
+namespace ICSharpCode.CodeConverter.Tests.TestRunners
 {
     /// <summary>
     /// Discover and return xUnit Facts in given assemblies
@@ -19,6 +19,7 @@ namespace CodeConverter.Tests.TestRunners
             return factMethods.Select(m => new NamedFact(GetFullName(m), () => {
                 var instance = Activator.CreateInstance(m.DeclaringType);
                 m.Invoke(instance, null);
+                return Task.CompletedTask;
             }));
         }
 

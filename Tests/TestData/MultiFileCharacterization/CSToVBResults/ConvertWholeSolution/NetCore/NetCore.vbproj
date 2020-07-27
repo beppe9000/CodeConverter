@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OptionInfer>On</OptionInfer>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net472</TargetFramework>
+    <DefaultItemExcludes>$(DefaultItemExcludes);$(ProjectDir)**\*.cs</DefaultItemExcludes>
+  </PropertyGroup>
+
+</Project>

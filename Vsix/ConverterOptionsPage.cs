@@ -1,9 +1,9 @@
 ﻿using System.ComponentModel;
 using Microsoft.VisualStudio.Shell;
 
-namespace CodeConverter.VsExtension
+namespace ICSharpCode.CodeConverter.VsExtension
 {
-    public class ConverterOptionsPage : DialogPage
+    internal sealed class ConverterOptionsPage : DialogPage
     {
         [Category("Settings")]
         [DisplayName("Copy result to clipboard")]

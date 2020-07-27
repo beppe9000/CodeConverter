@@ -1,19 +1,126 @@
 ﻿using System.Threading.Tasks;
-using CodeConverter.Tests.TestRunners;
-using ICSharpCode.CodeConverter;
-using ICSharpCode.CodeConverter.CSharp;
-using ICSharpCode.CodeConverter.Shared;
+using ICSharpCode.CodeConverter.Tests.TestRunners;
 using ICSharpCode.CodeConverter.VB;
 using Xunit;
 
-namespace CodeConverter.Tests.VB
+namespace ICSharpCode.CodeConverter.Tests.VB
 {
     public class MemberTests : ConverterTestBase
     {
         [Fact]
-        public void TestField()
+        public async Task TestPropertyWithModifierAsync()
         {
-            TestConversionCSharpToVisualBasic(
+            await TestConversionCSharpToVisualBasicAsync(
+@"class TestClass {
+    public string Text { get; private set; }
+}", @"Friend Class TestClass
+    Private _Text As String
+
+    Public Property Text As String
+        Get
+            Return _Text
+        End Get
+        Private Set(ByVal value As String)
+            _Text = value
+        End Set
+    End Property
+End Class
+
+1 target compilation errors:
+BC30451: '_Text' is not declared. It may be inaccessible due to its protection level.");
+        }
+
+        [Fact]
+        public async Task TestInferredPropertyInnerClassAsync(){
+            await TestConversionCSharpToVisualBasicAsync(
+@"class TestClass {
+    class InnerClass {
+        public string Text { get; private set; }
+    }
+}",
+@"Friend Class TestClass
+    Friend Class InnerClass
+        Private _Text As String
+
+        Public Property Text As String
+            Get
+                Return _Text
+            End Get
+            Private Set(ByVal value As String)
+                _Text = value
+            End Set
+        End Property
+    End Class
+End Class
+
+1 target compilation errors:
+BC30451: '_Text' is not declared. It may be inaccessible due to its protection level.");
+        }
+
+        [Fact]
+        public async Task TestProperty_StaticInferredAsync() {
+            await TestConversionCSharpToVisualBasicAsync(
+@"class TestClass {
+    public static string Text { get; private set; };
+    public int Count { get; private set; };
+}",
+                @"Friend Class TestClass
+    Private Shared _Text As String
+    Private _Count As Integer
+
+    Public Shared Property Text As String
+        Get
+            Return _Text
+        End Get
+        Private Set(ByVal value As String)
+            _Text = value
+        End Set
+    End Property
+
+    Public Property Count As Integer
+        Get
+            Return _Count
+        End Get
+        Private Set(ByVal value As Integer)
+            _Count = value
+        End Set
+    End Property
+End Class
+
+1 source compilation errors:
+CS1597: Semicolon after method or accessor block is not valid
+2 target compilation errors:
+BC30451: '_Text' is not declared. It may be inaccessible due to its protection level.
+BC30451: '_Count' is not declared. It may be inaccessible due to its protection level.");
+        }
+
+        [Fact]
+        public async Task TestProperty_StaticInferredInModuleAsync() {
+            await TestConversionCSharpToVisualBasicAsync(
+@"static class TestClass {
+    public static string Text { get; private set; }
+}",
+                @"Friend Module TestClass
+    Private _Text As String
+
+    Public Property Text As String
+        Get
+            Return _Text
+        End Get
+        Private Set(ByVal value As String)
+            _Text = value
+        End Set
+    End Property
+End Module
+
+1 target compilation errors:
+BC30451: '_Text' is not declared. It may be inaccessible due to its protection level.");
+        }
+
+        [Fact]
+        public async Task TestFieldAsync()
+        {
+            await TestConversionCSharpToVisualBasicAsync(
                 @"class TestClass
 {
     const int answer = 42;
@@ -25,34 +132,48 @@ namespace CodeConverter.Tests.VB
     Private ReadOnly v As Integer = 15
 End Class");
         }
+        [Fact]
+        public async Task DoNotSimplifyArrayTypeInFieldDeclarationsAsync() {
+            await TestConversionCSharpToVisualBasicAsync(
+@"class TestClass {
+    int[] answer = { 1, 2 };
+}",
+@"Friend Class TestClass
+    Private answer As Integer() = {1, 2}
+End Class");
+        }
 
         [Fact]
-        public void TestMethod()
+        public async Task TestMethodWithCommentsAsync()
         {
-            TestConversionCSharpToVisualBasic(
+            await TestConversionCSharpToVisualBasicAsync(
                 @"class TestClass
 {
     public void TestMethod<T, T2, T3>(out T argument, ref T2 argument2, T3 argument3) where T : class, new where T2 : struct
     {
-        argument = null;
-        argument2 = default(T2);
-        argument3 = default(T3);
+        argument = null; //1
+        argument2 = default(T2); //2
+        argument3 = default(T3); //3
     }
 }", @"Imports System.Runtime.InteropServices
 
 Friend Class TestClass
     Public Sub TestMethod(Of T As {Class, New}, T2 As Structure, T3)(<Out> ByRef argument As T, ByRef argument2 As T2, ByVal argument3 As T3)
-        argument = Nothing
-        argument2 = Nothing
-        argument3 = Nothing
+        argument = Nothing '1
+        argument2 = Nothing '2
+        argument3 = Nothing '3
     End Sub
-End Class");
+End Class
+
+2 source compilation errors:
+CS1003: Syntax error, '(' expected
+CS1026: ) expected");
         }
 
         [Fact]
-        public void TestMethodWithReturnType()
+        public async Task TestMethodWithReturnTypeAsync()
         {
-            TestConversionCSharpToVisualBasic(
+            await TestConversionCSharpToVisualBasicAsync(
                 @"class TestClass
 {
     public int TestMethod<T, T2, T3>(out T argument, ref T2 argument2, T3 argument3) where T : class, new where T2 : struct
@@ -65,13 +186,18 @@ Friend Class TestClass
     Public Function TestMethod(Of T As {Class, New}, T2 As Structure, T3)(<Out> ByRef argument As T, ByRef argument2 As T2, ByVal argument3 As T3) As Integer
         Return 0
     End Function
-End Class");
+End Class
+
+3 source compilation errors:
+CS1003: Syntax error, '(' expected
+CS1026: ) expected
+CS0177: The out parameter 'argument' must be assigned to before control leaves the current method");
         }
 
         [Fact]
-        public void TestStaticMethod()
+        public async Task TestStaticMethodAsync()
         {
-            TestConversionCSharpToVisualBasic(
+            await TestConversionCSharpToVisualBasicAsync(
                 @"class TestClass
 {
     public static void TestMethod<T, T2, T3>(out T argument, ref T2 argument2, T3 argument3) where T : class, new where T2 : struct
@@ -88,13 +214,17 @@ Friend Class TestClass
         argument2 = Nothing
         argument3 = Nothing
     End Sub
-End Class");
+End Class
+
+2 source compilation errors:
+CS1003: Syntax error, '(' expected
+CS1026: ) expected");
         }
 
         [Fact]
-        public void TestAbstractMethod()
+        public async Task TestAbstractMethodAsync()
         {
-            TestConversionCSharpToVisualBasic(
+            await TestConversionCSharpToVisualBasicAsync(
                 @"abstract class TestClass
 {
     public abstract void TestMethod();
@@ -104,9 +234,9 @@ End Class");
         }
 
         [Fact]
-        public void TestNewMethodIsOverloadsNotShadows()
+        public async Task TestNewMethodIsOverloadsNotShadowsAsync()
         {
-            TestConversionCSharpToVisualBasic(
+            await TestConversionCSharpToVisualBasicAsync(
                 @"class TestClass
 {
     public void TestMethod()
@@ -140,15 +270,15 @@ Friend Class TestSubclass
         TestMethod(3)
         System.Console.WriteLine(""Shadowed implementation"")
     End Sub
-End Class");
+End Class", conversionOptions: EmptyNamespaceOptionStrictOff);
         }
 
 
         [Fact]
-        public void OperatorOverloads()
+        public async Task OperatorOverloadsAsync()
         {
             // Note a couple map to the same thing in C# so occasionally the result won't compile. The user can manually decide what to do in such scenarios.
-            TestConversionCSharpToVisualBasic(@"public class AcmeClass
+            await TestConversionCSharpToVisualBasicAsync(@"public class AcmeClass
 {
     public static AcmeClass operator +(int i, AcmeClass ac)
     {
@@ -290,9 +420,9 @@ End Class");
         }
 
         [Fact]
-        public void TestSealedMethod()
+        public async Task TestSealedMethodAsync()
         {
-            TestConversionCSharpToVisualBasic(
+            await TestConversionCSharpToVisualBasicAsync(
                 @"class TestClass
 {
     public sealed void TestMethod<T, T2, T3>(out T argument, ref T2 argument2, T3 argument3) where T : class, new where T2 : struct
@@ -309,14 +439,22 @@ Friend Class TestClass
         argument2 = Nothing
         argument3 = Nothing
     End Sub
-End Class");
+End Class
+
+3 source compilation errors:
+CS1003: Syntax error, '(' expected
+CS1026: ) expected
+CS0238: 'TestClass.TestMethod<T, T2, T3>(out T, ref T2, T3)' cannot be sealed because it is not an override
+1 target compilation errors:
+BC31088: 'NotOverridable' cannot be specified for methods that do not override another method.");
         }
 
         [Fact]
-        public void TestExtensionMethod()
+        public async Task TestExtensionMethodAsync()
         {
-            TestConversionCSharpToVisualBasic(
-                @"static class TestClass
+            await TestConversionCSharpToVisualBasicAsync(
+@"using System;
+static class TestClass
 {
     public static void TestMethod(this String str)
     {
@@ -325,24 +463,26 @@ End Class");
     public static void TestMethod2Parameters(this String str, Action<string> _)
     {
     }
-}", @"Imports System.Runtime.CompilerServices
+}", @"Imports System
+Imports System.Runtime.CompilerServices
 
 Friend Module TestClass
     <Extension()>
-    Sub TestMethod(ByVal str As String)
+    Public Sub TestMethod(ByVal str As String)
     End Sub
 
     <Extension()>
-    Sub TestMethod2Parameters(ByVal str As String, ByVal __ As Action(Of String))
+    Public Sub TestMethod2Parameters(ByVal str As String, ByVal __ As Action(Of String))
     End Sub
-End Module");
+End Module", conversionOptions: EmptyNamespaceOptionStrictOff);
         }
 
         [Fact]
-        public void TestExtensionMethodWithExistingImport()
+        public async Task TestExtensionMethodWithExistingImportAsync()
         {
-            TestConversionCSharpToVisualBasic(
-                @"using System.Runtime.CompilerServices;
+            await TestConversionCSharpToVisualBasicAsync(
+@"using System; //Gets simplified away
+using System.Runtime.CompilerServices;
 
 static class TestClass
 {
@@ -353,15 +493,15 @@ static class TestClass
 
 Friend Module TestClass
     <Extension()>
-    Sub TestMethod(ByVal str As String)
+    Public Sub TestMethod(ByVal str As String)
     End Sub
 End Module");
         }
 
         [Fact]
-        public void TestProperty()
+        public async Task TestPropertyAsync()
         {
-            TestConversionCSharpToVisualBasic(
+            await TestConversionCSharpToVisualBasicAsync(
                 @"class TestClass
 {
     public int Test { get; set; }
@@ -386,23 +526,236 @@ End Module");
 
     Public Property Test3 As Integer
         Get
-            Return Me.m_test3
+            Return m_test3
         End Get
         Set(ByVal value As Integer)
-            Me.m_test3 = value
+            m_test3 = value
         End Set
     End Property
 End Class");
         }
 
         [Fact]
-        public void TestPropertyWithExpressionBody()
+        public async Task CaseConflict_PropertyAndField_EnsureOtherClassNotAffectedAsync() {
+            await TestConversionCSharpToVisualBasicAsync(
+@"public class HasConflictingPropertyAndField {
+    int test;
+    public int Test {
+        get { return test; }
+        set { test = value; }
+    }
+}
+public class ShouldNotChange {
+    int test;
+    public int Test1 {
+        get { return test; }
+        set { test = value; }
+    }
+}
+",
+                @"Public Class HasConflictingPropertyAndField
+    Private testField As Integer
+
+    Public Property Test As Integer
+        Get
+            Return testField
+        End Get
+        Set(ByVal value As Integer)
+            testField = value
+        End Set
+    End Property
+End Class
+
+Public Class ShouldNotChange
+    Private test As Integer
+
+    Public Property Test1 As Integer
+        Get
+            Return test
+        End Get
+        Set(ByVal value As Integer)
+            test = value
+        End Set
+    End Property
+End Class");
+        }
+
+        [Fact]
+        public async Task CaseConflict_ArgumentFieldAndMethodWithOverloadsAsync() {
+            await TestConversionCSharpToVisualBasicAsync(
+                @"public class HasConflictingMethodAndField {
+
+    public int HasConflictingParam(int test) {
+        this.teSt = test;
+        return test;
+    }
+
+    int teSt;
+
+    private int test() {
+        return 1;
+    }
+
+    public int Test() {
+        return test();
+    }
+
+    private int test(int arg) {
+        return arg;
+    }
+
+    public int Test(int arg) {
+        return test(arg);
+    }
+}",
+                @"Public Class HasConflictingMethodAndField
+    Public Function HasConflictingParam(ByVal test As Integer) As Integer
+        teStField = test
+        Return test
+    End Function
+
+    Private teStField As Integer
+
+    Private Function testMethod() As Integer
+        Return 1
+    End Function
+
+    Public Function Test() As Integer
+        Return testMethod()
+    End Function
+
+    Private Function testMethod(ByVal arg As Integer) As Integer
+        Return arg
+    End Function
+
+    Public Function Test(ByVal arg As Integer) As Integer
+        Return testMethod(arg)
+    End Function
+End Class");
+        }
+
+        [Fact]
+        public async Task CaseConflict_ArgumentFieldAndPropertyAsync() {
+            await TestConversionCSharpToVisualBasicAsync(
+@"public class HasConflictingPropertyAndField {
+
+    public int HasConflictingParam(int test) {
+        this.test = test;
+        return test;
+    }
+
+    int test;
+
+    public int Test {
+        get { return test; }
+        set { test = value; }
+    }
+}",
+                @"Public Class HasConflictingPropertyAndField
+    Public Function HasConflictingParam(ByVal test As Integer) As Integer
+        testField = test
+        Return test
+    End Function
+
+    Private testField As Integer
+
+    Public Property Test As Integer
+        Get
+            Return testField
+        End Get
+        Set(ByVal value As Integer)
+            testField = value
+        End Set
+    End Property
+End Class");
+        }
+
+        [Fact]
+        public async Task CaseConflict_ArgumentPropertyAndFieldAsync() {
+            await TestConversionCSharpToVisualBasicAsync(
+@"public class HasConflictingPropertyAndField {
+    int test;
+    public int Test {
+        get { return test; }
+        set { test = value; }
+    }
+    public int HasConflictingParam(int test) {
+        Test = test;
+        return test;
+    }
+}",
+                @"Public Class HasConflictingPropertyAndField
+    Private testField As Integer
+
+    Public Property Test As Integer
+        Get
+            Return testField
+        End Get
+        Set(ByVal value As Integer)
+            testField = value
+        End Set
+    End Property
+
+    Public Function HasConflictingParam(ByVal test As Integer) As Integer
+        Me.Test = test
+        Return test
+    End Function
+End Class");
+        }
+
+        [Fact]
+        public async Task CaseConflict_PartialClass_ArgumentFieldPropertyAndLocalInBothPartsAsync() {
+            await TestConversionCSharpToVisualBasicAsync(
+@"public partial class HasConflictingPropertyAndField {
+    public int HasConflictingParam(int test) {
+        int TEST = 0;
+        this.test = test + TEST;
+        return test;
+    }
+}
+
+public partial class HasConflictingPropertyAndField {
+    int test;
+    public int Test {
+        get 
         {
-            TestConversionCSharpToVisualBasic(
+            int TEST = 0;
+            return test + TEST;
+        }
+        set { test = value; }
+    }
+}",
+                @"Public Partial Class HasConflictingPropertyAndField
+    Public Function HasConflictingParam(ByVal test As Integer) As Integer
+        Dim lTEST As Integer = 0
+        testField = test + lTEST
+        Return test
+    End Function
+End Class
+
+Public Partial Class HasConflictingPropertyAndField
+    Private testField As Integer
+
+    Public Property Test As Integer
+        Get
+            Dim lTEST As Integer = 0
+            Return testField + lTEST
+        End Get
+        Set(ByVal value As Integer)
+            testField = value
+        End Set
+    End Property
+End Class");
+        }
+
+        [Fact]
+        public async Task TestPropertyWithExpressionBodyAsync()
+        {
+            await TestConversionCSharpToVisualBasicAsync(
                 @"public class ConversionResult
 {
     private string _sourcePathOrNull;
-    
+
     public string SourcePathOrNull {
         get => _sourcePathOrNull;
         set => _sourcePathOrNull = string.IsNullOrWhiteSpace(value) ? null : value;
@@ -422,14 +775,14 @@ End Class");
         }
 
         [Fact]
-        public void TestOmmittedAccessorsReplacedWithExpressionBody()
+        public async Task TestOmmittedAccessorsReplacedWithExpressionBodyAsync()
         {
-            TestConversionCSharpToVisualBasic(
-                @"class MyFavColor  
-{  
+            await TestConversionCSharpToVisualBasicAsync(
+                @"class MyFavColor
+{
     private string[] favColor => new string[] {""Red"", ""Green""};
     public string this[int index] => favColor[index];
-}  
+}
 ", @"Friend Class MyFavColor
     Private ReadOnly Property favColor As String()
         Get
@@ -446,13 +799,15 @@ End Class");
         }
 
         [Fact]
-        public void TestPropertyWithExpressionBodyThatCanBeStatement()
+        public async Task TestPropertyWithExpressionBodyThatCanBeStatementAsync()
         {
-            TestConversionCSharpToVisualBasic(
-                @"public class ConversionResult
+            await TestConversionCSharpToVisualBasicAsync(
+                @"using System;
+
+public class ConversionResult
 {
     private int _num;
-    
+
     public string Num {
         set => _num++;
     }
@@ -460,7 +815,9 @@ End Class");
     public string Blanket {
         set => throw new Exception();
     }
-}", @"Public Class ConversionResult
+}", @"Imports System
+
+Public Class ConversionResult
     Private _num As Integer
 
     Public WriteOnly Property Num As String
@@ -478,9 +835,9 @@ End Class");
         }
 
         [Fact]
-        public void TestPropertyWithAttribute()
+        public async Task TestPropertyWithAttributeAsync()
         {
-            TestConversionCSharpToVisualBasic(
+            await TestConversionCSharpToVisualBasicAsync(
                 @"class TestClass
 {
     [DatabaseGenerated(DatabaseGeneratedOption.None)]
@@ -489,13 +846,38 @@ End Class");
     <DatabaseGenerated(DatabaseGeneratedOption.None)>
     Private Property value As Integer
 End Class
+
+3 source compilation errors:
+CS0246: The type or namespace name 'DatabaseGeneratedAttribute' could not be found (are you missing a using directive or an assembly reference?)
+CS0246: The type or namespace name 'DatabaseGenerated' could not be found (are you missing a using directive or an assembly reference?)
+CS0103: The name 'DatabaseGeneratedOption' does not exist in the current context
+2 target compilation errors:
+BC30002: Type 'DatabaseGenerated' is not defined.
+BC30451: 'DatabaseGeneratedOption' is not declared. It may be inaccessible due to its protection level.
 ");
         }
 
         [Fact]
-        public void TestConstructor()
+        public async Task TestClassWithGlobalAttributeAsync()
         {
-            TestConversionCSharpToVisualBasic(
+            await TestConversionCSharpToVisualBasicAsync(
+                @"[global::System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
+internal class Resources
+{
+}", @"
+<Global.System.Runtime.CompilerServices.CompilerGeneratedAttribute()>
+Friend Class Resources
+End Class
+
+1 target compilation errors:
+BC30002: Type 'Global.System.Runtime.CompilerServices.CompilerGeneratedAttribute' is not defined.
+");
+        }
+
+        [Fact]
+        public async Task TestConstructorAsync()
+        {
+            await TestConversionCSharpToVisualBasicAsync(
                 @"class TestClass<T, T2, T3> where T : class, new where T2 : struct
 {
     public TestClass(out T argument, ref T2 argument2, T3 argument3)
@@ -506,14 +888,19 @@ End Class
 Friend Class TestClass(Of T As {Class, New}, T2 As Structure, T3)
     Public Sub New(<Out> ByRef argument As T, ByRef argument2 As T2, ByVal argument3 As T3)
     End Sub
-End Class");
+End Class
+
+3 source compilation errors:
+CS1003: Syntax error, '(' expected
+CS1026: ) expected
+CS0177: The out parameter 'argument' must be assigned to before control leaves the current method");
         }
 
 
         [Fact]
-        public void TestStaticConstructor()
+        public async Task TestStaticConstructorAsync()
         {
-            TestConversionCSharpToVisualBasic(
+            await TestConversionCSharpToVisualBasicAsync(
                 @"static SurroundingClass()
 {
 }", @"Shared Sub New()
@@ -521,9 +908,9 @@ End Sub");
         }
 
         [Fact]
-        public void TestConstructorCallingBase()
+        public async Task TestConstructorCallingBaseAsync()
         {
-            TestConversionCSharpToVisualBasic(
+            await TestConversionCSharpToVisualBasicAsync(
                 @"public class MyBaseClass
 {
     public MyBaseClass(object o)
@@ -531,8 +918,8 @@ End Sub");
     }
 }
 
-public sealed class MyClass 
- : MyBaseClass 
+public sealed class MyClass
+ : MyBaseClass
 {
 	 public MyClass(object o)
 	  : base(o)
@@ -553,9 +940,9 @@ End Class");
         }
 
         [Fact]
-        public void TestDestructor()
+        public async Task TestDestructorAsync()
         {
-            TestConversionCSharpToVisualBasic(
+            await TestConversionCSharpToVisualBasicAsync(
                 @"class TestClass
 {
     ~TestClass()
@@ -568,25 +955,45 @@ End Class");
         }
 
         [Fact]
-        public void TestEvent()
+        public async Task TestExternDllImportAsync()
         {
-            TestConversionCSharpToVisualBasic(
+            await TestConversionCSharpToVisualBasicAsync(
+                @"[DllImport(""kernel32.dll"", SetLastError = true)]
+static extern IntPtr OpenProcess(AccessMask dwDesiredAccess, bool bInheritHandle, uint dwProcessId);", @"<DllImport(""kernel32.dll"", SetLastError:=True)>
+Private Shared Function OpenProcess(ByVal dwDesiredAccess As AccessMask, ByVal bInheritHandle As Boolean, ByVal dwProcessId As UInteger) As IntPtr
+End Function
+
+5 source compilation errors:
+CS0246: The type or namespace name 'AccessMask' could not be found (are you missing a using directive or an assembly reference?)
+CS0246: The type or namespace name 'IntPtr' could not be found (are you missing a using directive or an assembly reference?)
+CS0246: The type or namespace name 'DllImportAttribute' could not be found (are you missing a using directive or an assembly reference?)
+CS0246: The type or namespace name 'DllImport' could not be found (are you missing a using directive or an assembly reference?)
+CS0246: The type or namespace name 'SetLastError' could not be found (are you missing a using directive or an assembly reference?)
+1 target compilation errors:
+BC30002: Type 'AccessMask' is not defined.");
+        }
+
+        [Fact]
+        public async Task TestEventAsync()
+        {
+            await TestConversionCSharpToVisualBasicAsync(
                 @"class TestClass
 {
     public event EventHandler MyEvent;
 }", @"Friend Class TestClass
     Public Event MyEvent As EventHandler
-End Class");
+End Class
+
+1 source compilation errors:
+CS0246: The type or namespace name 'EventHandler' could not be found (are you missing a using directive or an assembly reference?)");
         }
 
         [Fact]
-        public void TestCustomEvent()
-        {
-            TestConversionCSharpToVisualBasic(
-                @"using System;
+        public async Task TestCustomEventAsync() {
+            await TestConversionCSharpToVisualBasicAsync(
+@"using System;
 
-class TestClass
-{
+class TestClass {
     EventHandler backingField;
 
     public event EventHandler MyEvent {
@@ -597,26 +1004,153 @@ class TestClass
             this.backingField -= value;
         }
     }
-}", @"Imports System
+    public void Reset() {
+        backingField = null;
+    }
+}",
+                @"Imports System
 
 Friend Class TestClass
     Private backingField As EventHandler
 
-    Public Event MyEvent As EventHandler
+    Public Custom Event MyEvent As EventHandler
         AddHandler(ByVal value As EventHandler)
-            AddHandler Me.backingField, value
+            backingField = [Delegate].Combine(backingField, value)
         End AddHandler
         RemoveHandler(ByVal value As EventHandler)
-            RemoveHandler Me.backingField, value
+            backingField = [Delegate].Remove(backingField, value)
         End RemoveHandler
+        RaiseEvent(ByVal sender As Object, ByVal e As EventArgs)
+            backingField?(sender, e)
+        End RaiseEvent
+    End Event
+
+    Public Sub Reset()
+        backingField = Nothing
+    End Sub
+End Class
+
+2 target compilation errors:
+BC36637: The '?' character cannot be used here.
+BC30451: '[Delegate]' is not declared. It may be inaccessible due to its protection level.");
+        }
+        [Fact]
+        public async Task TestCustomEvent_TrivialExpressionAsync()
+        {
+            await TestConversionCSharpToVisualBasicAsync(
+@"using System;
+class TestClass {
+    EventHandler _backingField;
+
+    public event EventHandler MyEvent {
+        add { _backingField += value; }
+        remove { _backingField -= value; }
+    }
+}",
+                @"Imports System
+
+Friend Class TestClass
+    Private _backingField As EventHandler
+
+    Public Custom Event MyEvent As EventHandler
+        AddHandler(ByVal value As EventHandler)
+            _backingField = [Delegate].Combine(_backingField, value)
+        End AddHandler
+        RemoveHandler(ByVal value As EventHandler)
+            _backingField = [Delegate].Remove(_backingField, value)
+        End RemoveHandler
+        RaiseEvent(ByVal sender As Object, ByVal e As EventArgs)
+            _backingField?(sender, e)
+        End RaiseEvent
+    End Event
+End Class
+
+2 target compilation errors:
+BC36637: The '?' character cannot be used here.
+BC30451: '[Delegate]' is not declared. It may be inaccessible due to its protection level.");
+        }
+        [Fact]
+        public async Task TestCustomEventUsingFieldEventAsync() {
+            await TestConversionCSharpToVisualBasicAsync(
+@"using System;
+
+class TestClass {
+    event EventHandler backingField;
+
+    public event EventHandler MyEvent {
+        add { backingField += value; }
+        remove { backingField -= value; }
+    }
+}",
+@"Imports System
+
+Friend Class TestClass
+    Private Event backingField As EventHandler
+
+    Public Custom Event MyEvent As EventHandler
+        AddHandler(ByVal value As EventHandler)
+            AddHandler backingField, value
+        End AddHandler
+        RemoveHandler(ByVal value As EventHandler)
+            RemoveHandler backingField, value
+        End RemoveHandler
+        RaiseEvent(ByVal sender As Object, ByVal e As EventArgs)
+            RaiseEvent backingField(sender, e)
+        End RaiseEvent
     End Event
 End Class");
         }
-
         [Fact]
-        public void TestIndexer()
+        public async Task SubscribeEventInPropertySetterAsync() {
+            await TestConversionCSharpToVisualBasicAsync(
+@"using System.ComponentModel;
+
+class TestClass {
+    OwnerClass owner;
+
+    public OwnerClass Owner {
+        get { return owner; }
+        set {
+            owner = value;
+            ((INotifyPropertyChanged)owner).PropertyChanged += OnOwnerChanged;
+        }
+    }
+    void OnOwnerChanged(object sender, PropertyChangedEventArgs args) { }
+}
+class OwnerClass : INotifyPropertyChanged {
+}",
+@"Imports System.ComponentModel
+
+Friend Class TestClass
+    Private ownerField As OwnerClass
+
+    Public Property Owner As OwnerClass
+        Get
+            Return ownerField
+        End Get
+        Set(ByVal value As OwnerClass)
+            ownerField = value
+            AddHandler CType(ownerField, INotifyPropertyChanged).PropertyChanged, AddressOf OnOwnerChanged
+        End Set
+    End Property
+
+    Private Sub OnOwnerChanged(ByVal sender As Object, ByVal args As PropertyChangedEventArgs)
+    End Sub
+End Class
+
+Friend Class OwnerClass
+    Implements INotifyPropertyChanged
+End Class
+
+1 source compilation errors:
+CS0535: 'OwnerClass' does not implement interface member 'INotifyPropertyChanged.PropertyChanged'
+1 target compilation errors:
+BC30149: Class 'OwnerClass' must implement 'Event PropertyChanged As PropertyChangedEventHandler' for interface 'INotifyPropertyChanged'.");
+        }
+        [Fact]
+        public async Task TestIndexerAsync()
         {
-            TestConversionCSharpToVisualBasic(
+            await TestConversionCSharpToVisualBasicAsync(
                 @"class TestClass
 {
     private int[] _Items;
@@ -676,22 +1210,138 @@ End Class");
 
     Default Public Property Item(ByVal index As Double) As Integer
         Get
-            Return Me.m_test3
+            Return m_test3
         End Get
         Set(ByVal value As Integer)
-            Me.m_test3 = value
+            m_test3 = value
         End Set
     End Property
 End Class");
         }
+        [Fact]
+        public async Task Interface_IndexerAsync()
+        {
+            await TestConversionCSharpToVisualBasicAsync(
+@"public interface iDisplay {
+    object this[int i] { get; set; }
+}",
+                @"Public Interface iDisplay
+    Default Property Item(ByVal i As Integer) As Object
+End Interface");
+        }
+        [Fact]
+        public async Task Indexer_EmptySetterAsync()
+        {
+            await TestConversionCSharpToVisualBasicAsync(
+@"using System.Collections
 
+class TestClass : IList {
 
+    public object this[int index] {
+        get { return index; }
+        set { }
+    }
+}",
+                @"Imports System.Collections
+
+Friend Class TestClass
+    Implements IList
+
+    Default Public Property Item(ByVal index As Integer) As Object Implements IList.Item
+        Get
+            Return index
+        End Get
+        Set(ByVal value As Object)
+        End Set
+    End Property
+End Class
+
+15 source compilation errors:
+CS1002: ; expected
+CS0535: 'TestClass' does not implement interface member 'IList.Add(object)'
+CS0535: 'TestClass' does not implement interface member 'IList.Contains(object)'
+CS0535: 'TestClass' does not implement interface member 'IList.Clear()'
+CS0535: 'TestClass' does not implement interface member 'IList.IndexOf(object)'
+CS0535: 'TestClass' does not implement interface member 'IList.Insert(int, object)'
+CS0535: 'TestClass' does not implement interface member 'IList.Remove(object)'
+CS0535: 'TestClass' does not implement interface member 'IList.RemoveAt(int)'
+CS0535: 'TestClass' does not implement interface member 'IList.IsReadOnly'
+CS0535: 'TestClass' does not implement interface member 'IList.IsFixedSize'
+CS0535: 'TestClass' does not implement interface member 'ICollection.CopyTo(Array, int)'
+CS0535: 'TestClass' does not implement interface member 'ICollection.Count'
+CS0535: 'TestClass' does not implement interface member 'ICollection.SyncRoot'
+CS0535: 'TestClass' does not implement interface member 'ICollection.IsSynchronized'
+CS0535: 'TestClass' does not implement interface member 'IEnumerable.GetEnumerator()'
+14 target compilation errors:
+BC30149: Class 'TestClass' must implement 'Function Add(value As Object) As Integer' for interface 'IList'.
+BC30149: Class 'TestClass' must implement 'Function Contains(value As Object) As Boolean' for interface 'IList'.
+BC30149: Class 'TestClass' must implement 'Sub Clear()' for interface 'IList'.
+BC30149: Class 'TestClass' must implement 'Function IndexOf(value As Object) As Integer' for interface 'IList'.
+BC30149: Class 'TestClass' must implement 'Sub Insert(index As Integer, value As Object)' for interface 'IList'.
+BC30149: Class 'TestClass' must implement 'Sub Remove(value As Object)' for interface 'IList'.
+BC30149: Class 'TestClass' must implement 'Sub RemoveAt(index As Integer)' for interface 'IList'.
+BC30149: Class 'TestClass' must implement 'ReadOnly Property IsReadOnly As Boolean' for interface 'IList'.
+BC30149: Class 'TestClass' must implement 'ReadOnly Property IsFixedSize As Boolean' for interface 'IList'.
+BC30149: Class 'TestClass' must implement 'Sub CopyTo(array As Array, index As Integer)' for interface 'ICollection'.
+BC30149: Class 'TestClass' must implement 'ReadOnly Property Count As Integer' for interface 'ICollection'.
+BC30149: Class 'TestClass' must implement 'ReadOnly Property SyncRoot As Object' for interface 'ICollection'.
+BC30149: Class 'TestClass' must implement 'ReadOnly Property IsSynchronized As Boolean' for interface 'ICollection'.
+BC30149: Class 'TestClass' must implement 'Function GetEnumerator() As IEnumerator' for interface 'IEnumerable'.");
+        }
+        [Fact]
+        public async Task Indexer_BadCaseAsync()
+        {
+            await TestConversionCSharpToVisualBasicAsync(
+@"class TestClass {
+    public object this[int index] {
+        get { }
+        set { }
+    }
+}",
+                @"Friend Class TestClass
+    Default Public Property Item(ByVal index As Integer) As Object
+        Get
+        End Get
+        Set(ByVal value As Object)
+        End Set
+    End Property
+End Class
+
+1 source compilation errors:
+CS0161: 'TestClass.this[int].get': not all code paths return a value");
+        }
+        [Fact]
+        public async Task NameMatchesWithTypeDateAsync() {
+            await TestConversionCSharpToVisualBasicAsync(
+@"using System; //Gets simplified away
+
+class TestClass {
+    private DateTime date;
+}",
+                @"Friend Class TestClass
+    Private [date] As Date
+End Class");
+        }
+        [Fact]
+        public async Task ParameterWithNamespaceTestAsync() {
+            await TestConversionCSharpToVisualBasicAsync(
+@"public class TestClass {
+    public object TestMethod(System.Type param1, System.Globalization.CultureInfo param2) {
+        return null;
+    }
+}",
+                @"Public Class TestClass
+    Public Function TestMethod(ByVal param1 As System.Type, ByVal param2 As System.Globalization.CultureInfo) As Object
+        Return Nothing
+    End Function
+End Class", conversionOptions: EmptyNamespaceOptionStrictOff);
+    }
 
         [Fact]// The stack trace displayed will change from time to time. Feel free to update this characterization test appropriately.
-        public async Task InvalidOperatorOverloadsShowErrorInlineCharacterization()
+        public async Task InvalidOperatorOverloadsShowErrorInlineCharacterizationAsync()
         {
             // No valid conversion to C# - to implement this you'd need to create a new method, and convert all callers to use it.
-            var convertedCode = await GetConvertedCodeOrErrorString<CSToVBConversion>(@"public class AcmeClass
+            var convertedCode = await ConvertAsync<CSToVBConversion>(@"public class AcmeClass
 {
     public static AcmeClass operator ++(int i, AcmeClass ac)
     {
@@ -707,5 +1357,67 @@ End Class");
             Assert.Contains("public static AcmeClass operator ++(int i, AcmeClass ac)", convertedCode);
             Assert.Contains("public static AcmeClass operator --(string s, AcmeClass ac)", convertedCode);
         }
+        [Fact]
+        public async Task MethodOverloadsAsync() {
+            await TestConversionCSharpToVisualBasicAsync(
+@"public class MailEmployee {
+    public string Email { get; set; }
+    protected bool Equals(MailEmployee other) {
+        return Email == other.Email;
+    }
+    public override bool Equals(object obj) {
+        return Equals((MailEmployee)obj);
+    }
+}",
+                @"Public Class MailEmployee
+    Public Property Email As String
+
+    Protected Overloads Function Equals(ByVal other As MailEmployee) As Boolean
+        Return Equals(Email, other.Email)
+    End Function
+
+    Public Overrides Function Equals(ByVal obj As Object) As Boolean
+        Return Equals(CType(obj, MailEmployee))
+    End Function
+End Class");
+        }
+        [Fact]
+        public async Task Interface_GetAsync() {
+            await TestConversionCSharpToVisualBasicAsync(
+@"public interface IParametersProvider {
+    IEnumerable<object> Parameters { get; }
+}",
+                @"Public Interface IParametersProvider
+    ReadOnly Property Parameters As IEnumerable(Of Object)
+End Interface
+
+1 source compilation errors:
+CS0246: The type or namespace name 'IEnumerable<>' could not be found (are you missing a using directive or an assembly reference?)");
+        }
+        [Fact]
+        public async Task Interface_SetAsync() {
+            await TestConversionCSharpToVisualBasicAsync(
+@"public interface IParametersProvider {
+    IEnumerable<object> Parameters { set; }
+}",
+                @"Public Interface IParametersProvider
+    WriteOnly Property Parameters As IEnumerable(Of Object)
+End Interface
+
+1 source compilation errors:
+CS0246: The type or namespace name 'IEnumerable<>' could not be found (are you missing a using directive or an assembly reference?)");
+        }
+        [Fact]
+        public async Task PartialMethodAsync() {
+            await TestConversionCSharpToVisualBasicAsync(
+@"public partial class Entities {
+    partial void OnContextCreated();
+}",
+@"Public Partial Class Entities
+    Partial Private Sub OnContextCreated()
+    End Sub
+End Class");
+        }
+
     }
 }
